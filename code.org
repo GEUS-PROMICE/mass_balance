@@ -2,7 +2,7 @@
 #+PROPERTY: header-args:bash+ :comments both :noweb yes :eval no-export
 #+PROPERTY: header-args:bash+ :session (concat "*" (file-name-sans-extension (buffer-name)) "-shell*")
 #+PROPERTY: header-args:bash+ :tangle-mode (identity #o544) :shebang #!/usr/bin/env bash
-#+PROPERTY: header-args:jupyter-python :kernel TMB :session TMB :noweb yes :comments both
+#+PROPERTY: header-args:python :kernel TMB :session TMB :noweb yes :comments both
 
 * Table of contents                               :toc_2:noexport:
 - [[#rois][ROIs]]
@@ -29,6 +29,7 @@
   - [[#sectors-1][Sectors]]
   - [[#test-location-alignment-2][Test location alignment]]
 - [[#smb-to-rois][SMB to ROIs]]
+
   - [[#print-dates][Print dates]]
   - [[#hirham-1][HIRHAM]]
   - [[#mar-1][MAR]]
@@ -627,7 +628,7 @@ d.rast regions_e@Mouginot_2019
 * SMB to ROIs
 ** Print dates
 
-#+BEGIN_SRC jupyter-python :tangle nc_dates.py
+#+BEGIN_SRC python :tangle nc_dates.py
 import xarray as xr
 import sys
 
@@ -673,7 +674,8 @@ r.in.gdal -o input=./tmp/HIRHAM_regions_e_Mouginot_2019.tif output=regions_e
 r.region -c map=sectors_e
 r.region -c map=regions_e
 
-if [ -z ${RECENT+x} ]; then
+
+if [ "$RECENT" = "false" ] || [ -z ${RECENT+x} ]; then
   f_list=$(ls ${dir}/*.nc) ## initial
   log_info "Initial run. Processing all files"
 else
@@ -733,7 +735,7 @@ mkdir -p tmp/${RCM}
 dir=${DATADIR}/MAR/3.12
 f=$(ls ${dir}/MAR-????.nc|head -n1) # debug
 
-if [ -z ${RECENT+x} ]; then
+if [ "$RECENT" = "false" ] || [ -z ${RECENT+x} ]; then
   f_list=$(ls ${dir}/*.nc) ## initial
   log_info "Initial run. Processing all files"
 else
@@ -801,7 +803,7 @@ mkdir -p tmp/${RCM}
 dir=${DATADIR}/${RCM}/daily
 f=$(ls ${dir}/*.nc|head -n1) # debug
 
-if [ -z ${RECENT+x} ]; then
+if [ "$RECENT" = "false" ] || [ -z ${RECENT+x} ]; then
   f_list=$(ls ${dir}/*.nc) ## initial
   log_info "Initial run. Processing all files"
 else
@@ -875,7 +877,7 @@ For HIRHAM, resolution is in degrees not meters.
 + 1 degree of latitude @ 10 °N is 110608 m => 110608 * 0.0083333 = 921.7296464 m
 
 #+NAME: SMB_bsv2nc
-#+BEGIN_SRC jupyter-python :tangle SMB_bsv2nc.py
+#+BEGIN_SRC python :tangle SMB_bsv2nc.py
 import pandas as pd
 import xarray as xr
 import numpy as np
@@ -949,21 +951,21 @@ print('{:.4f}'.format(err.sum()))
 for roi in ['sector','region']:
     mean = SMB[['HIRHAM_'+roi, 'MAR_'+roi, 'RACMO_'+roi]].to_array(dim='m').mean('m')
     s = 'SMB_' + roi
-    SMB[s] = (('time',roi), mean)
+    SMB[s] = (('time',roi), mean.data)
     # SMB[s].attrs["long_name"] = "Surface mass balance (RCM mean)"
     # SMB[s].attrs["standard_name"] = "land_ice_mass_tranport"
     # SMB[s].attrs["units"] = "Gt d-1"
     # SMB[s].attrs["coordinates"] = "time region"
 
     s = s + '_err'
-    SMB[s] = (('time',roi), mean * 0.15)
+    SMB[s] = (('time',roi), mean.data * 0.15)
     # SMB[s].attrs["long_name"] = "Surface mass balance (RCM mean) uncertainty"
     # SMB[s].attrs["standard_name"] = "land_ice_mass_tranport"
     # SMB[s].attrs["units"] = "Gt d-1"
     # SMB[s].attrs["coordinates"] = "time region"
 
-SMB['SMB'] = (('time'), SMB['SMB_sector'].sum(dim='sector'))
-SMB['SMB_err'] = (('time'), SMB['SMB_sector'].sum(dim='sector') * 0.09)
+SMB['SMB'] = (('time'), SMB['SMB_sector'].sum(dim='sector').data)
+SMB['SMB_err'] = (('time'), SMB['SMB_sector'].sum(dim='sector').data * 0.09)
 
 fn = './tmp/SMB.nc'
 if os.path.exists(fn): os.remove(fn)
@@ -976,7 +978,7 @@ SMB.to_netcdf(fn)
 
 Test:
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
 ds = xr.open_dataset('./tmp/SMB.nc')
 ds[['SMB','HIRHAM_sector','MAR_sector','RACMO_sector']].sum(dim='sector').to_dataframe().plot()
@@ -1308,7 +1310,7 @@ mkdir -p tmp/BMB
 dir=${DATADIR}/${RCM}/3.12
 f=$(ls ${dir}/MAR-????.nc|head -n1) # debug
 
-if [ -z ${RECENT+x} ]; then
+if [ "$RECENT" = "false" ] || [ -z ${RECENT+x} ]; then
   f_list=$(ls ${dir}/*.nc) ## initial
   log_info "Initial run. Processing all files"
 else
@@ -1396,7 +1398,7 @@ done
 *** BSV to NetCDF
 
 # #+NAME: BMB_bsv2nc
-#+BEGIN_SRC jupyter-python :tangle BMB_bsv2nc.py
+#+BEGIN_SRC python :tangle BMB_bsv2nc.py
 import pandas as pd
 import xarray as xr
 import numpy as np
@@ -1459,18 +1461,18 @@ BMB['VHD_region'] = (('time','region'),
 # for roi in ['sector','region','basin']:
 for roi in ['sector','region']:
     v = 'VHD_'+roi
-    BMB[v] = (('time',roi), BMB[v] * 1E-3)
+    BMB[v] = (('time',roi), BMB[v].data * 1E-3)
 
 
 #          grid cells    m^3->kg  kg->Gt
 BMB = BMB * 1000 * 1000 * 1E3    / 1E12
 
-BMB['GF_sector_err'] = BMB['GF_sector'] * 0.5
-BMB['vel_sector_err'] = BMB['vel_sector'] * 0.333
-BMB['VHD_sector_err'] = BMB['VHD_sector'] * 0.15
-BMB['GF_region_err'] = BMB['GF_region'] * 0.5
-BMB['vel_region_err'] = BMB['vel_region'] * 0.333
-BMB['VHD_region_err'] = BMB['VHD_region'] * 0.15
+BMB['GF_sector_err'] = (('sector'), BMB['GF_sector'].data * 0.5)
+BMB['vel_sector_err'] = (('sector'), BMB['vel_sector'].data * 0.333)
+BMB['VHD_sector_err'] = (('time', 'sector'), BMB['VHD_sector'].data * 0.15)
+BMB['GF_region_err'] = (('region'), BMB['GF_region'].data * 0.5)
+BMB['vel_region_err'] = (('region'), BMB['vel_region'].data * 0.333)
+BMB['VHD_region_err'] = (('time', 'region'), BMB['VHD_region'].data * 0.15)
 
 fn = './tmp/BMB.nc'
 if os.path.exists(fn): os.remove(fn)
@@ -1524,7 +1526,7 @@ From citet:karlsson_2021 (Table 1)
 | TOTAL  | 5.3 | 13.0 | 4.1 |  22.3 |
 
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as x
 BMB = xr.open_dataset('./tmp/BMB.nc')
 
@@ -1562,11 +1564,11 @@ Adjust SMB and D using 1986 through 2012 overlap
 ** Load
 
 #+NAME: load_K2015_raw
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import pandas as pd
 
 fname = 'Greenland_mass_balance_totals_1840-2012_ver_20141130_with_uncert_via_Kjeldsen_et_al_2015.csv'
-k2015 = pd.read_csv('/home/kdm/data/Kjeldsen_2015/' + fname, index_col=0, parse_dates=True)\
+k2015 = pd.read_csv('~/data/Kjeldsen_2015/' + fname, index_col=0, parse_dates=True)\
           .rename(columns={'discharge from 6 year lagged average runoff' : 'D',
                            'discharge 1sigma' : 'D_err'})
 
@@ -1583,7 +1585,7 @@ k2015 = k2015.drop(columns=['accumulation', 'accumulation 1sigma',
 #+END_SRC
 
 #+NAME: K2015_adj_prep
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 <<load_K2015_raw>>
 <<load_SMB>>
 <<load_D>>
@@ -1598,7 +1600,7 @@ k2015_overlap = k2015.loc['1986':'2012']
 #+END_SRC
 
 #+NAME: load_k2015
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 <<k2015_adj_prep>>
 
 import scipy as sp
@@ -1622,7 +1624,7 @@ k2015['D_err'] = (k2015['D_err'] + D['D_err'].mean())
 
 ** Plot overlap
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 <<load_K2015>>
 k2015 = k2015.loc['1986':'2012']
 
@@ -1798,7 +1800,7 @@ Generate a TMB netcdf file from SMB, D, and BMB
 ** Load SMB
 
 #+NAME: load_SMB
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 <<py_import>>
 
 SMB = xr.open_dataset("./tmp/SMB.nc")
@@ -1810,10 +1812,10 @@ SMB['region'] = SMB['region'].astype(str)
 ** Load D (Mankoff 2020)
 
 #+NAME: load_D
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
 
-ds = xr.open_dataset("/home/kdm/data/Mankoff_2020/ice/latest/gate.nc")
+ds = xr.open_dataset("~/data/Mankoff_2020/ice/latest/gate.nc")
 # ds = xr.open_dataset("/home/kdm/projects/ice_discharge/out/gate.nc")
 
 # rstr = {'NW':11, 'NO':12, 'NE':1, 'CE':3, 'CW':9, 'SE':5, 'SW':7}
@@ -1845,8 +1847,8 @@ D = ds_sector
 D = D.merge(ds_region, compat='override')
 # D = D.merge(ds_basin)
 
-D['D'] = (('time'), D['D_sector'].sum(dim='sector'))
-D['D_err'] = (('time'), D['err_sector'].sum(dim='sector'))
+D['D'] = (('time'), D['D_sector'].sum(dim='sector').data)
+D['D_err'] = (('time'), D['err_sector'].sum(dim='sector').data)
 
 # convert from Gt/year @ misc time-steps -> Gt/day @ daily timestep
 msave = D.copy(deep=True)
@@ -1877,7 +1879,7 @@ D = D_fc
   + +7d err is (in this case) cumsum of 25 largest.
 
 #+NAME: forecast_D
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -1947,7 +1949,7 @@ D_fc = D_fc.bfill(dim='time')
 #+RESULTS: forecast_D
 
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 <<load_D>>
 
 fig = plt.figure(1)
@@ -1995,7 +1997,7 @@ df.describe()
 ** Load BMB (Karlsson 2021)
 
 #+NAME: load_BMB
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 <<py_import>>
 
 BMB = xr.open_dataset('./tmp/BMB.nc')
@@ -2003,27 +2005,27 @@ BMB['region'] = BMB['region'].astype(str)
 
 BMB['BMB'] = (('time'), (BMB['GF_sector'] \
                          + BMB['vel_sector'] \
-                         + BMB['VHD_sector']).sum(dim='sector'))
+                         + BMB['VHD_sector']).sum(dim='sector').data)
 
 BMB['BMB_err'] = (('time'), ((BMB['GF_sector_err']**2 \
                               + BMB['vel_sector_err']**2 \
-                              + BMB['VHD_sector_err']**2)**0.5).sum(dim='sector'))
+                              + BMB['VHD_sector_err']**2)**0.5).sum(dim='sector').data)
 
-BMB['BMB_sector'] = (('time','sector'), BMB['VHD_sector'] + BMB['GF_sector'] + BMB['vel_sector'])
-BMB['BMB_region'] = (('time','region'), BMB['VHD_region'] + BMB['GF_region'] + BMB['vel_region'])
+BMB['BMB_sector'] = (('time','sector'), BMB['VHD_sector'].data + BMB['GF_sector'].data + BMB['vel_sector'].data)
+BMB['BMB_region'] = (('time','region'), BMB['VHD_region'].data + BMB['GF_region'].data + BMB['vel_region'].data)
 # BMB['BMB_basin'] = BMB['VHD_basin'] + BMB['GF_basin'] + BMB['vel_basin']
 
 BMB['BMB_sector_err'] = (('time','sector'), \
-                         ((BMB['GF_sector_err'].expand_dims({'time':BMB['time'].size}))**2 \
-                          + (BMB['vel_sector_err'].expand_dims({'time':BMB['time'].size}))**2 \
-                          + BMB['VHD_sector_err']**2\
+                         ((BMB['GF_sector_err'].expand_dims({'time':BMB['time'].size})).data**2 \
+                          + (BMB['vel_sector_err'].expand_dims({'time':BMB['time'].size})).data**2 \
+                          + BMB['VHD_sector_err'].data**2\
                           )**0.5\
                          )
 
 BMB['BMB_region_err'] = (('time','region'), \
-                         ((BMB['GF_region_err'].expand_dims({'time':BMB['time'].size}))**2 \
-                          + (BMB['vel_region_err'].expand_dims({'time':BMB['time'].size}))**2 \
-                          + BMB['VHD_region_err']**2\
+                         ((BMB['GF_region_err'].expand_dims({'time':BMB['time'].size})).data**2 \
+                          + (BMB['vel_region_err'].expand_dims({'time':BMB['time'].size})).data**2 \
+                          + BMB['VHD_region_err'].data**2\
                           )**0.5\
                          )
 
@@ -2056,7 +2058,7 @@ BMB[['VHD_sector','GF_sector','vel_sector','BMB']].sum(dim='sector').to_datafram
 :END:
 
 #+NAME: load_and_adjust_K2015
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 <<load_K2015>>
 
 ## Add BMB
@@ -2112,11 +2114,11 @@ k2015['MB'] = k2015['SMB'] - k2015['D'] - k2015['BMB']
   
 ** Create TMB output
 :PROPERTIES:
-:header-args:jupyter-python+: :tangle build_TMB_nc.py
+:header-args:python+: :tangle build_TMB_nc.py
 :ID:       20210730T084938.500158
 :END:
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 <<load_and_adjust_K2015>>
 
 k2015 = k2015.loc['1840':'1986']
@@ -2132,6 +2134,7 @@ SMB['SMB'] = (('time'),
               np.append(k2015['SMB'].values/365, SMB['SMB'].sel({'time':slice('1986','2200')}).values))
 SMB['SMB_err'] = (('time'),
                   np.append(k2015['SMB_err'].values/365, SMB['SMB_err'].sel({'time':slice('1986','2200')}).values))
+
 
 
 
@@ -2179,7 +2182,7 @@ D = D.bfill(dim='time')
 : p:  5.267031413783773e-09
 : std_err : 0.003206184032882044
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import subprocess
 import os
 
@@ -2191,7 +2194,7 @@ for roi in ['sector', 'region']: # TODO: 'basin'
     MB["time"].attrs["standard_name"] = "time"
     MB["time"].attrs["axis"] = "T"
 
-    MB[roi] = ((roi), D[roi])
+    MB[roi] = ((roi), D[roi].data)
     if roi == 'sector':
         MB[roi].attrs["long_name"] = "Zwally 2012 sectors"
     elif roi == 'region':
@@ -2202,8 +2205,8 @@ for roi in ['sector', 'region']: # TODO: 'basin'
 
     MB_hist = (k2015['SMB'] - k2015['D'] - k2015['BMB'])/365
     MB_recent = (SMB['SMB'] - D['D'] - BMB['BMB']).to_dataframe('MB').loc['1986':]['MB']
-    MB['MB'] = (('time'), MB_hist.append(MB_recent))
-    MB['MB_err'] = (('time'), (SMB['SMB_err']**2 + D['D_err']**2 + BMB['BMB_err']**2)**0.5)
+    MB['MB'] = (('time'), MB_hist._append(MB_recent))
+    MB['MB_err'] = (('time'), (SMB['SMB_err'].data**2 + D['D_err'].data**2 + BMB['BMB_err'].data**2)**0.5)
 
     v = 'MB'
     MB[v].attrs["long_name"] = "Mass balance"
@@ -2211,18 +2214,18 @@ for roi in ['sector', 'region']: # TODO: 'basin'
     MB[v].attrs["units"] = "Gt d-1"
     MB[v].attrs["coordinates"] = 'time'
     
-    MB['MB_ROI'] = (('time',roi), SMB['SMB_'+roi] - D['D_'+roi] - BMB['BMB_'+roi])
-    MB['MB_ROI_err'] = (('time',roi), (SMB['SMB_'+roi+'_err']**2 + D['err_'+roi]**2 + BMB['BMB_'+roi+'_err']**2)**0.5)
+    MB['MB_ROI'] = (('time',roi), (SMB['SMB_'+roi] - D['D_'+roi] - BMB['BMB_'+roi]).data)
+    MB['MB_ROI_err'] = (('time',roi), (SMB['SMB_'+roi+'_err'].data**2 + D['err_'+roi].data**2 + BMB['BMB_'+roi+'_err'].data**2)**0.5)
     # MB['MB_ROI'].attrs = MB['MB'].attrs
     # MB['MB_ROI'].attrs["coordinates"] = 'time ROI'
 
     # if roi == 'region':
     #     from IPython import embed; embed()
     
-    MB['SMB'] = (('time'), SMB['SMB'])
-    MB['SMB_err'] = (('time'), SMB['SMB_err'])
-    MB['SMB_ROI'] = (('time',roi), SMB['SMB_'+roi])
-    MB['SMB_ROI_err'] = (('time',roi), SMB['SMB_'+roi+'_err'])
+    MB['SMB'] = (('time'), SMB['SMB'].data)
+    MB['SMB_err'] = (('time'), SMB['SMB_err'].data)
+    MB['SMB_ROI'] = (('time',roi), SMB['SMB_'+roi].data)
+    MB['SMB_ROI_err'] = (('time',roi), SMB['SMB_'+roi+'_err'].data)
     # MB['SMB_HIRHAM'] = (('time',roi), SMB['HIRHAM_'+roi]-D['D_'+roi] )
     # MB['SMB_MAR'] = (('time',roi), SMB['HIRHAM_'+roi]-D['D_'+roi])
     # MB['SMB_RACMO'] = (('time',roi), SMB['HIRHAM_'+roi]-D['D_'+roi])
@@ -2235,10 +2238,10 @@ for roi in ['sector', 'region']: # TODO: 'basin'
         MB[v].attrs["coordinates"] = 'time ' + roi
 
        
-    MB['D'] = (('time'), D['D'])
-    MB['D_err'] = (('time'), D['D_err'])
-    MB['D_ROI'] = (('time',roi), D['D_'+roi])
-    MB['D_ROI_err'] = (('time',roi), D['err_'+roi])
+    MB['D'] = (('time'), D['D'].data)
+    MB['D_err'] = (('time'), D['D_err'].data)
+    MB['D_ROI'] = (('time',roi), D['D_'+roi].data)
+    MB['D_ROI_err'] = (('time',roi), D['err_'+roi].data)
     for v in ['D','D_ROI', 'D_err', 'D_ROI_err']:
         ln = 'Marine mass balance'
         if 'err' in v: ln = ln + ' uncertainty'
@@ -2249,10 +2252,10 @@ for roi in ['sector', 'region']: # TODO: 'basin'
     MB['D_ROI'].attrs["coordinates"] = 'time ' + roi
 
     
-    MB['BMB'] = (('time'), BMB['BMB'])
-    MB['BMB_err'] = (('time'), BMB['BMB_err'])
-    MB['BMB_ROI'] = (('time',roi), BMB['BMB_'+roi])
-    MB['BMB_ROI_err'] = (('time',roi), BMB['BMB_'+roi+'_err'])
+    MB['BMB'] = (('time'), BMB['BMB'].data)
+    MB['BMB_err'] = (('time'), BMB['BMB_err'].data)
+    MB['BMB_ROI'] = (('time',roi), BMB['BMB_'+roi].data)
+    MB['BMB_ROI_err'] = (('time',roi), BMB['BMB_'+roi+'_err'].data)
     for v in ['BMB','BMB_ROI']:
         ln = 'Basal mass balance'
         if 'err' in v: ln = ln + ' uncertainty'
@@ -2276,7 +2279,7 @@ for roi in ['sector', 'region']: # TODO: 'basin'
     # MB['BMB_ROI'].attrs["coordinates"] = 'time ' + roi
 
     for RCM in ['HIRHAM','MAR','RACMO']:
-        MB['MB_'+RCM] = (('time',roi), SMB[RCM+'_'+roi]-D['D_'+roi]-BMB['BMB_'+roi] )
+        MB['MB_'+RCM] = (('time',roi), SMB[RCM+'_'+roi].data-D['D_'+roi].data-BMB['BMB_'+roi].data )
         v = 'MB_'+RCM
         MB[v].attrs['long_name'] = 'Mass balance from ' + v.split('_')[1]
         MB[v].attrs["standard_name"] = "land_ice_mass_tranport"
@@ -2337,11 +2340,11 @@ df.to_csv('./TMB/MB_SMB_D_BMB_ann.csv', float_format='%.6f')
 ** IO (Mouginot)
 
 #+name: load_mouginot
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 
 ds = xr.Dataset()
 
-df = pd.read_excel('/home/kdm/data/Mouginot_2019/pnas.1904242116.sd02.xlsx', sheet_name=1)
+df = pd.read_excel('~/data/Mouginot_2019/pnas.1904242116.sd02.xlsx', sheet_name=1)
 
 ## Discharge
 c0 = 15 # Column containing 1972
@@ -2572,9 +2575,9 @@ variables:
 *** Load VC
 
 #+NAME: load_vc
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
-ds = xr.open_dataset("/home/kdm/data/Simonsen_2021/ds1.nc")
+ds = xr.open_dataset("~/data/Simonsen_2021/ds1.nc")
 # print(ds)
 
 vc = xr.Dataset()
@@ -2596,11 +2599,11 @@ vc['err'] = (("time","sector"), ds[['VMBer_basin_1','VMBer_basin_2','VMBer_basin
 http://products.esa-icesheets-cci.org/products/downloadlist/GMB/
 
 #+NAME: load_grace
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import pandas as pd
 from datetime import timedelta, datetime
 
-root = '/home/kdm/data/CCI/GMB/greenland_gravimetric_mass_balance_rl06_dtuspace_v2_0-170820/time_series'
+root = '~/data/CCI/GMB/greenland_gravimetric_mass_balance_rl06_dtuspace_v2_0-170820/time_series'
 df = pd.read_csv(root + '/GIS00_grace.dat',
                  delim_whitespace=True,
                  header=None,
@@ -2647,9 +2650,9 @@ grace.head()
 This spreadsheet contains the IMBIE-2019 datasets for Greenland, which includes data on the annual rate of change and cumulative change in Greenland’s ice sheet mass, its surface mass balance and ice discharge anomalies, and their estimated uncertainty. The data are expressed in units of rate of mass change (Gigatons per year – sheet 1, columns B, C, F, G, J and K) mass (Gigatons – sheet 1, columns D, E, H, I, L and M) and in units of equivalent mean global sea level rise (millimetres per year – sheet 2, columns B, C, F, G, J and K, and millimetres – sheet 2, columns D, E, H, I, L and M).
 
 #+NAME: load_imbie
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import pandas as pd
-imbie = pd.read_excel("/home/kdm/data/IMBIE/imbie_dataset_greenland_dynamics-2020_02_28.xlsx", sheet_name=0, index_col=0, usecols=(0,1,2,3,4,5,6,9,10))\
+imbie = pd.read_excel("~/data/IMBIE/imbie_dataset_greenland_dynamics-2020_02_28.xlsx", sheet_name=0, index_col=0, usecols=(0,1,2,3,4,5,6,9,10))\
        .rename(columns={"Rate of ice sheet mass change (Gt/yr)":"MB",
                         "Rate of ice sheet mass change uncertainty (Gt/yr)":"MB_err",
                         "Cumulative ice sheet mass change (Gt)" : "MB_cum",
@@ -2673,9 +2676,9 @@ imbie = imbie.drop('index', axis='columns')
 ** PROMICE MB
 
 #+NAME: load_PROMICE_MB
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 def load_Colgan_2019(sheet=0):
-    df_all = pd.read_excel("/home/kdm/data/Colgan_2019/MassBalance_07022019.xlsx", index_col=0, sheet_name=sheet)
+    df_all = pd.read_excel("~/data/Colgan_2019/MassBalance_07022019.xlsx", index_col=0, sheet_name=sheet)
     
     df_all = df_all.loc[df_all.index.dropna()]\
                    .drop(index='Total')\
@@ -2721,7 +2724,7 @@ promice['MB_err'] = (("time","sector"), e.values)
 :ID:       20210413T061118.026153
 :END:
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
 
 ds = xr.open_dataset('./TMB/MB_region.nc')\
@@ -2839,13 +2842,13 @@ r.report -hi units=k map=RACMO,zwally --q
 
 What % of SMB changes occur in the uncovered regions?
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
-ds = xr.open_mfdataset('/home/kdm/data/RACMO/daily/SMB_rec.201*.nc', combine='by_coords')
+ds = xr.open_mfdataset('~/data/RACMO/daily/SMB_rec.201*.nc', combine='by_coords')
 ds = ds.resample({'time':'YS'}).sum()
 ds.to_netcdf('./tmp/RACMO_2010s.nc')
 
-ds = xr.open_mfdataset('/home/kdm/data/RACMO/daily/SMB_rec.2020*.nc', combine='by_coords')
+ds = xr.open_mfdataset('~/DATADIR/RACMO/daily/SMB_rec.2020*.nc', combine='by_coords')
 ds = ds.sum(dim='time')
 ds.to_netcdf('./tmp/RACMO_2020.nc')
 #+END_SRC
@@ -3013,14 +3016,14 @@ r.report -hi units=k map=BedMachine,MAR --q
 
 What % of MAR runoff occurs in the uncovered regions?
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
-ds = xr.open_mfdataset('/home/kdm/data/MAR/3.12/MAR-201*.nc', combine='by_coords')['ru']
+ds = xr.open_mfdataset('~/data/MAR/3.12/MAR-201*.nc', combine='by_coords')['ru']
 ds = ds.sel({'sector':1}).resample({'time':'YS'}).mean()
 ds = ds.where(~np.isinf(ds), 0)
 ds.to_netcdf('./tmp/MAR_2010s.nc')
 
-ds = xr.open_mfdataset('/home/kdm/data/MAR/3.12/MAR-2020.nc', combine='by_coords')['ru']
+ds = xr.open_mfdataset('~/data/MAR/3.12/MAR-2020.nc', combine='by_coords')['ru']
 ds = ds.sel({'sector':1}).sum(dim='time')
 ds.to_netcdf('./tmp/MAR_2020.nc')
 #+END_SRC
@@ -3398,7 +3401,7 @@ ps.map complete. PostScript file './tmp/overview.eps' successfully written.
 
 ** SMB/D/MB timeseries
 *** GIS
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
 import numpy as np
 import pandas as pd
@@ -3544,7 +3547,7 @@ o ./fig/overview_w_plots.png
 : Bitmap saved as: ./fig/overview_w_plots.png
 
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
 import numpy as np
 import pandas as pd
@@ -3646,7 +3649,7 @@ o ./fig/MB_cumsum_compare_manual.png
 : Bitmap saved as: ./fig/MB_cumsum_compare_manual.png
 
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
 import numpy as np
 import pandas as pd
@@ -3889,7 +3892,7 @@ plt.savefig('fig/MB_cumsum_compare.svg', transparent=False, bbox_inches='tight',
 
 ** This vs. Mouginot (2019): GIS xy
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
 import numpy as np
 import pandas as pd
@@ -4030,7 +4033,7 @@ plt.savefig('fig/mouginot_2019.png', transparent=False, bbox_inches='tight', dpi
 
 ** This vs. Colgan (2019): GIS xy
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
 import numpy as np
 import pandas as pd
@@ -4170,7 +4173,7 @@ plt.savefig('fig/colgan_2019.png', transparent=False, bbox_inches='tight', dpi=3
 
 ** This vs. IMBIE/GRACE/VC GIS XY
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
 import numpy as np
 import pandas as pd
@@ -4332,7 +4335,7 @@ plt.savefig('fig/this_v_grace_vc_imbie.png', transparent=False, bbox_inches='tig
 
 
 ** HIRHAM MAR RACMO timeseries
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
 import numpy as np
 import pandas as pd
@@ -4415,7 +4418,7 @@ plt.savefig('fig/MB_3RCM.png', transparent=False, bbox_inches='tight', dpi=300)
 
 ** This vs. Mouginot (2019): regions xy
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
 import numpy as np
 import pandas as pd
@@ -4551,7 +4554,7 @@ plt.savefig('fig/mouginot_2019_regions.png', transparent=False, bbox_inches='tig
 
 ** This vs. Colgan (2019): Sectors xy
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
 import numpy as np
 import pandas as pd
@@ -4777,7 +4780,7 @@ r.out.gdal input=coverage_M output=./tmp/H_cover_M.tif
 
 See [[id:20210406T102219.348249][Load and adjust Reconstructed K2015]]
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
 import numpy as np
 import pandas as pd
@@ -4922,7 +4925,7 @@ df.to_csv('./tmp/credit.csv')
 : None
 
 
-#+BEGIN_SRC jupyter-python :session credit
+#+BEGIN_SRC python :session credit
 import seaborn as sns
 import numpy as np
 import pandas as pd
@@ -4974,7 +4977,7 @@ plt.savefig('./fig/credit.png', transparent=False, bbox_inches='tight', dpi=150)
 ** Imports
 
 #+NAME: py_import
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import numpy as np
 import xarray as xr
 import datetime
@@ -4983,7 +4986,7 @@ import pandas as pd
 
 ** Adjust Spines
 
-#+BEGIN_SRC jupyter-python :tangle adjust_spines.py
+#+BEGIN_SRC python :tangle adjust_spines.py
 # http://matplotlib.org/examples/pylab_examples/spine_placement_demo.html
 def adjust_spines(ax,spines, offset=10):
     for loc, spine in ax.spines.items():
@@ -5044,7 +5047,7 @@ if __name__ == "__main__":
 
 ** round axes
 #+NAME: round_axes
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 def round_axes(x, y=None):
     x = np.append(x,y) if y is not None else np.array(x)
     # print(x)
@@ -5131,7 +5134,7 @@ python -m pip install --upgrade git+https://github.com/aussda/pyDataverse.git@3b
 
 *** Upload script
 
-#+BEGIN_SRC jupyter-python :session TMB_DV :tangle upload_to_DV.py
+#+BEGIN_SRC python :session TMB_DV :tangle upload_to_DV.py
 from pyDataverse.api import NativeApi
 import os
 import json
@@ -5204,7 +5207,7 @@ curl -H X-Dataverse-key:$API_TOKEN -X POST -F "file=@$FILENAME" -F 'jsonData={"d
 :ID:       20210803T051000.448219
 :END:
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
 
 MB = xr.open_dataset('./TMB/MB_region.nc')\
@@ -5273,7 +5276,7 @@ max    142.888631  110.238556  583.959367  52.556343  495.130950  52.812337  29.
 
 Years with min & max MB
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 df_yr = df_yr.loc['1986':]
 
 print(df_yr.iloc[df_yr['MB'].argmin()])
@@ -5310,7 +5313,7 @@ Name: 1996-01-01 00:00:00, dtype: float64
 :ID:       20210813T110327.480906
 :END:
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import xarray as xr
 
 MB = xr.open_dataset('./TMB/MB_region.nc')\
@@ -5373,7 +5376,7 @@ time
 
 Decades with min & max SMB
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 print(df_yr.iloc[df_yr['SMB'].argmin()])
 print("")
 print(df_yr.iloc[df_yr['SMB'].argmax()])
@@ -5407,7 +5410,7 @@ Name: 1860-01-01 00:00:00, dtype: float64
 
 Decades with min and max D
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 print(df_yr.iloc[df_yr['D'].argmin()])
 print("")
 print(df_yr.iloc[df_yr['D'].argmax()])
@@ -5441,7 +5444,7 @@ Name: 2010-01-01 00:00:00, dtype: float64
 
 Decades with min and max BMB
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 print(df_yr.iloc[df_yr['BMB'].argmin()])
 print("")
 print(df_yr.iloc[df_yr['BMB'].argmax()])
@@ -5473,14 +5476,203 @@ BMB_err     15.615669
 Name: 1930-01-01 00:00:00, dtype: float64
 #+end_example
 
+* Docker
+  :PROPERTIES:
+  :header-args:docker: :eval no
+  :END:
+
+
+** GRASS
+:PROPERTIES:
+:header-args:docker: :eval no
+:END:
+**** Dockerfile
+
+#+BEGIN_SRC docker :tangle docker/grass/Dockerfile :mkdirp docker/grass
+FROM ubuntu:20.04
+
+LABEL authors="Signe Hillerup Larsen"
+LABEL maintainer="shl@geus.dk"
+
+# system environment
+ENV DEBIAN_FRONTEND noninteractive
+
+
+RUN apt-get -y update && apt-get install -y --no-install-recommends --no-install-suggests \
+      bash \
+      cdo \
+      datamash \
+      gawk \
+      gdal-bin \
+      grass-core \
+      grass-dev \
+      grass-gui \
+      nco \
+      netcdf-bin \
+      parallel \
+      proj-bin \
+      sed \
+      python3 \
+      python3-pip \
+      python3-distutils \
+      build-essential \
+      subversion \
+      ca-certificates \
+      git \
+  && apt-get autoremove -y \
+  && apt-get clean -y \ 
+  && rm -rf /var/lib/apt/lists/*
+
+# Set the default Python version
+RUN ln -s /usr/bin/python3 /usr/bin/python
+
+# Upgrade pip to ensure compatibility with the latest packages
+RUN pip3 install --no-cache-dir --upgrade pip
+
+# Install a compatible version of numpy, pandas, and xarray
+RUN pip3 install --no-cache-dir numpy>=1.20 netcdf4 scipy h5netcdf pandas xarray
+
+RUN echo LANG="en_US.UTF-8" > /etc/default/locale
+
+ENV LANGUAGE en_US.UTF-8
+ENV LANG C
+ENV LC_ALL C
+ENV LC_CTYPE C
+
+ENV SHELL /bin/bash
+
+# create a user
+RUN useradd --create-home user && chmod a+rwx /home/user
+ENV HOME /home/user
+WORKDIR /home/user
+RUN mkdir -p /home/user/data && chown user:user /home/user/data
+ENV DATADIR /home/user/data
+
+# Clone grass-addons and list directory structure
+RUN git clone https://github.com/OSGeo/grass-addons.git \
+  && ls -R grass-addons \
+  && cd grass-addons/src/raster/r.stream.basins || echo "Directory not found" \
+  && grass --config path \
+  && MODULE_TOPDIR=/usr/lib/grass78 \
+  && make MODULE_TOPDIR=$MODULE_TOPDIR \
+  && cd ../r.stream.distance \
+  && make MODULE_TOPDIR=$MODULE_TOPDIR \
+  && rm -rf /home/user/grass-addons
+
+# switch the user
+USER user
+
+CMD ["/usr/bin/grass", "--version"]
+#+END_SRC
+
+**** Build
+#+BEGIN_SRC bash
+# docker build -f Dockerfile_grass -t ice_discharge_grass .
+cd docker/grass
+docker build -t hillerup/tmb_grass .
+docker run -it hillerup/tmb_grass # run it
+#+END_SRC
+
+
+**** Deploy
+
+#+BEGIN_SRC bash
+# docker tag local-image:tagname new-repo:tagname
+docker tag tmb_grass hillerup/tmb_grass:latest
+docker push hillerup/tmb_grass
+#+END_SRC
+
+
+** Python
+:PROPERTIES:
+:header-args:docker: :eval no
+:END:
+
+**** Dockerfile and supporting files
+
+#+BEGIN_SRC docker :tangle docker/conda/Dockerfile :mkdirp docker/conda
+FROM continuumio/miniconda3
+
+RUN conda install \
+  curl \
+  cython \
+  ipython \
+  jupyter \
+  matplotlib \
+  numpy \
+  pandas \
+  pip \
+  scipy \
+  statsmodels \
+  tabulate \
+  xarray \
+  && conda clean -a \
+  && pip install --no-cache-dir \
+  cfchecker \
+  cfunits \
+  grass-session \
+  nc-time-axis \
+  pyshp \
+  semver \
+  uncertainties 
+ 
+# create a user
+RUN useradd --create-home user && chmod a+rwx /home/user
+ENV HOME /home/user
+WORKDIR /home/user
+
+RUN mkdir -p /home/user/data
+ENV DATADIR /home/user/data
+
+# switch the user
+USER user
+
+
+# create a user
+# RUN useradd -m -U user
+
+# RUN chmod a+rwx /home/user
+# ENV HOME /home/user
+# RUN mkdir -p /data /work
+# WORKDIR /work
+
+# switch the user
+# USER user
+
+# RUN mkdir -p /data /work
+# WORKDIR /work
+
+# The code to run when container is started:
+# ENTRYPOINT ["conda", "run", "-n", "ice_discharge", "python3"]
+
+# For interactive shell
+# RUN conda init bash
+# RUN echo "conda activate ice_discharge" >> /root/.bashrc
+#+END_SRC
+
+**** Build
+#+BEGIN_SRC bash
+cd docker/conda
+docker build -t hillerup/tmb_conda .
+#docker run -it --mount type=bind,src=$(pwd),dst=/work hillerup/tmb:conda python -c 'import pandas as pd; print(pd)'
+#+END_SRC
+
+**** Deploy
+
+#+BEGIN_SRC bash
+# docker tag local-image:tagname new-repo:tagname
+docker tag tmb_conda hillerup/tmb_conda:latest
+docker push hillerup/tmb_conda
+#+END_SRC
+
 
 * Twitter
 ** Twitter figure
 :PROPERTIES:
-:header-args:jupyter-python+: :tangle twitfig.py
+:header-args:python+: :tangle twitfig.py
 :END:
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import matplotlib
 matplotlib.use('Agg') # Must be before importing matplotlib.pyplot or pylab!
 import pandas as pd
@@ -5585,7 +5777,7 @@ plt.savefig('./twitfig.png', dpi=150, bbox_inches='tight')
 
 ** Twitter bot
 :PROPERTIES:
-:header-args:jupyter-python+: :tangle twitbot.py
+:header-args:python+: :tangle twitbot.py
 :END:
 
 + Graph up :: 📈 (mass loss, SLR up)
@@ -5595,7 +5787,7 @@ plt.savefig('./twitfig.png', dpi=150, bbox_inches='tight')
 + Water drop :: 💧
 + Greenland flag :: 🇬🇱
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import tweepy
 import pandas as pd
 import numpy as np
@@ -5668,7 +5860,7 @@ https://doi.org/10.5194/essd-13-5001-2021
 https://doi.org/10.22008/FK2/OHI23Z
 #+end_example
 
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import secret
 
 # # Authenticate to Twitter
@@ -5695,28 +5887,10 @@ api.update_status(tweet_str, media_ids=[media.media_id])
 #+END_SRC
 
 * Environment
+It is more reproducuble to use the docker images =hillerup/tmb_grass= and =hillerup/tmb_conda= but an environment to run the process can be recreated follwing the below steps.
 ** Software
 
 This project uses software - bash, GRASS, Python, etc. The python environment is reproducible if you have Conda installed. Below I provide the version of the software(s) used to create this document in order to support the goal of bit-matching reproducibility. 
-
-*** Os installed
-#+BEGIN_SRC bash :results table
-for tool in gdal-bin parallel sed gawk netcdf-bin proj-bin nco cdo bash grass-gui datamash; do dpkg -l | grep "ii  ${tool} " | cut -c5-90; done| sort
-#+END_SRC
-
-#+RESULTS:
-| bash       | 5.0-6ubuntu1.1     |
-| cdo        | 1.9.9~rc1-1        |
-| datamash   | 1.4-1              |
-| gawk       | 1:5.0.1+dfsg-1     |
-| gdal-bin   | 3.0.4+dfsg-1build3 |
-| grass-gui  | 7.8.2-1build3      |
-| nco        | 4.9.1-1build2      |
-| netcdf-bin | 1:4.7.3-1          |
-| parallel   | 20161222-1.1       |
-| proj-bin   | 6.3.1-1            |
-| sed        | 4.7-1              |
-
 
 *** Org Mode
 #+BEGIN_SRC emacs-lisp :eval no-export :exports both
@@ -6143,7 +6317,7 @@ prefix: /home/kdm/local/miniconda3/envs/TMB
 
 *** Packages
 #+NAME: init_py
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -6153,7 +6327,7 @@ import xarray as xr
 
 *** Graphics
 #+NAME: init_graphics
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import matplotlib.pyplot as plt
 
 from matplotlib import rc
@@ -6170,13 +6344,13 @@ matplotlib.pyplot.xkcd()
 + This is so that Python babel blocks can also easily get that property.
 
 #+NAME: get_DATADIR
-#+BEGIN_SRC jupyter-python
+#+BEGIN_SRC python
 import os
 DATADIR = os.environ['DATADIR']
 #+END_SRC
 
 Example:
-#+BEGIN_SRC jupyter-python :tangle no
+#+BEGIN_SRC python :tangle no
 <<get_DATADIR>>
 print(DATADIR)
 #+END_SRC
@@ -6258,91 +6432,6 @@ Then switch from system to local library.bib in ms.org
                )
 
 (setq-local org-latex-title-command "")
-#+END_SRC
-
-
-* Makefile
-:PROPERTIES:
-:CUSTOM_ID: sec:makefile
-:END:
-
-This code, and all code files in this project, are derived products tangled from the sob.org source file.
-
-#+BEGIN_SRC makefile :tangle Makefile :tangle-mode (identity #o444)
-PROMICE_MB: all
-# dist
-
-all: FORCE
-	mkdir -p tmp dat
-
-	# set up
-	grass -e -c EPSG:4326 G_HIRHAM
-	grass ./G_HIRHAM/PERMANENT/ --exec ./HIRHAM.sh
-	grass -e -c XY G_HIRHAM_XY
-	
-	grass -e -c EPSG:3413 G_MAR
-	grass ./G_MAR/PERMANENT --exec ./MAR.sh
-
-	grass -e -c EPSG:3413 G_RACMO
-	grass ./G_RACMO/PERMANENT --exec ./RACMO.sh
-
-	# BMB setup on the MAR grid
-	grass ./G_MAR/PERMANENT --exec ./BMB.sh
-	
-	make SMB
-	make BMB
-	make dist
-
-SMB: FORCE
-	# partition RCM by Zwally sectors, Mouginot basins, and Mouginot regions
-	grass ./G_HIRHAM_XY/PERMANENT --exec ./SMB_HIRHAM_ROI.sh
-	grass ./G_MAR/PERMANENT --exec ./SMB_MAR_ROI.sh
-	grass ./G_RACMO/PERMANENT --exec ./SMB_RACMO_ROI.sh
-	./SMB_merge.sh
-	python ./SMB_bsv2nc.py
-
-BMB: FORCE
-	grass ./G_MAR/PERMANENT --exec ./BMB_MAR.sh
-	./BMB_merge.sh
-	python ./BMB_bsv2nc.py
-
-update: FORCE
-	# remove previously forecasted MAR 
-	for n in $$(seq -10 10); do d=$$(date --date="$${n} days ago" --iso-8601); rm -f ./tmp/MAR/*_$${d}.bsv; done
-	RECENT=true make SMB
-	for n in $$(seq -10 10); do d=$$(date --date="$${n} days ago" --iso-8601); rm -f ./tmp/BMB/*_$${d}.bsv; done
-	RECENT=true make BMB
-	make dist
-
-
-validate: FORCE
-	grass -e -c EPSG:3413 G
-	
-dist: FORCE
-	mkdir -p TMB
-	# create end-user data product
-	python ./build_TMB_nc.py
-	# python ./upload_to_DV.py
-	python ./twitfig.py
-	# python ./twitbot.py
-
-
-FORCE: # dummy target
-
-clean_30:
-	# Rebuild the last 30 days
-	for n in $$(seq -10 30); do d=$$(date --date="$${n} days ago" --iso-8601); rm -f ./tmp/MAR/*_$${d}.bsv; done
-	for n in $$(seq -10 30); do d=$$(date --date="$${n} days ago" --iso-8601); rm -f ./tmp/RACMO/*_$${d}.bsv; done
-	for n in $$(seq -10 30); do d=$$(date --date="$${n} days ago" --iso-8601); rm -f ./tmp/BMB/*_$${d}.bsv; done
-	make update
-	
-
-clean_all:
-	rm -fR G G_RACMO G_HIRHAM G_HIRHAM_XY G_MAR G_tmp tmp dat TMB
-
-clean_SMB:
-	rm -fR tmp/HIRHAM tmp/MAR tmp/RACMO 
-	
 #+END_SRC
 
 
